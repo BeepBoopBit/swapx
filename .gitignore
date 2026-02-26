@@ -1,0 +1,16 @@
+/target
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug
+*.pdb

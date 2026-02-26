@@ -1,0 +1,25 @@
+[package]
+name = "swapx"
+version = "0.1.0"
+edition = "2021"
+description = "A command rewriter for your terminal — define rules that automatically transform commands before they execute"
+license = "MIT"
+repository = "https://github.com/BeepBoopBit/swapx"
+readme = "README.md"
+keywords = ["cli", "shell", "command", "rewrite", "alias"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml_ng = "0.10"
+regex = "1"
+dialoguer = "0.11"
+dirs = "6"
+thiserror = "2"
+glob = "0.3"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
