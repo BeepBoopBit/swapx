@@ -14,6 +14,9 @@ pub enum SwapxError {
     #[error("Prompt error: {0}")]
     Dialoguer(#[from] dialoguer::Error),
 
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
     #[error("Config error: {0}")]
     Config(String),
 }

@@ -59,6 +59,16 @@ pub enum Commands {
         command: Vec<String>,
     },
 
+    /// Scan system and suggest rules based on installed tools and project files
+    Suggest {
+        /// Show suggestions without saving
+        #[arg(long)]
+        check: bool,
+        /// Accept all suggestions with defaults, no prompts
+        #[arg(long)]
+        auto: bool,
+    },
+
     /// Pass-through: any command not matching a built-in subcommand
     #[command(external_subcommand)]
     External(Vec<String>),

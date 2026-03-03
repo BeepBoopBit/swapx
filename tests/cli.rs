@@ -1182,6 +1182,99 @@ fn plk_config_rule_with_dir_not_matching_cwd_skips() {
         .stdout(predicate::str::contains("git checkout main"));
 }
 
+// ─── suggest ───
+
+#[test]
+fn suggest_check_shows_suggestions() {
+    // `sh` should always be on PATH, but our built-in suggestions look for bat/eza/rg/fd/dust.
+    // We test that --check at least runs without error and shows the expected output format.
+    let dir = TempDir::new().unwrap();
+
+    let result = swapx()
+        .args(["suggest", "--check"])
+        .current_dir(dir.path())
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
+        .assert()
+        .success();
+
+    // Should show either "suggestion(s)" or "No suggestions found"
+    let output = result.get_output();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("suggestion") || stderr.contains("No suggestions found"),
+        "expected suggestion output, got: {}",
+        stderr
+    );
+}
+
+#[test]
+fn suggest_auto_creates_rules() {
+    let dir = TempDir::new().unwrap();
+    let config_dir = dir.path().join(".config").join("swapx");
+    fs::create_dir_all(&config_dir).unwrap();
+
+    // Create a suggestion pack that detects "sh" (always available)
+    let suggestions_dir = config_dir.join("suggestions.d");
+    fs::create_dir_all(&suggestions_dir).unwrap();
+    fs::write(
+        suggestions_dir.join("test.yaml"),
+        r#"suggestions:
+  - name: test-suggestion
+    description: "test suggestion for sh"
+    detect:
+      bin: sh
+    rules:
+      - match: "test-match-pattern"
+        replace:
+          - label: "use alt"
+            with: "alt-pattern"
+            default: true
+          - label: "keep original"
+            with: "test-match-pattern"
+"#,
+    )
+    .unwrap();
+
+    swapx()
+        .args(["suggest", "--auto"])
+        .current_dir(dir.path())
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Saved"));
+
+    // Verify rules were saved to global config
+    let rules_path = config_dir.join("rules.yaml");
+    assert!(rules_path.exists(), "rules.yaml should have been created");
+    let contents = fs::read_to_string(&rules_path).unwrap();
+    assert!(
+        contents.contains("test-match-pattern"),
+        "saved rules should contain the match pattern"
+    );
+    assert!(
+        contents.contains("alt-pattern"),
+        "saved rules should contain the replacement"
+    );
+}
+
+#[test]
+fn suggest_no_suggestions() {
+    let dir = TempDir::new().unwrap();
+
+    // Use an empty PATH so no binaries are detected
+    swapx()
+        .args(["suggest", "--check"])
+        .current_dir(dir.path())
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
+        .env("PATH", dir.path().join("empty-bin"))
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("No suggestions found"));
+}
+
 // ─── dir field ───
 
 #[test]

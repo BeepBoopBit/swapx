@@ -6,6 +6,7 @@ mod executor;
 mod interactive;
 mod models;
 mod shell_hook;
+mod suggest;
 
 use std::io::{self, IsTerminal, Read};
 use std::process;
@@ -235,6 +236,11 @@ fn run() -> Result<i32, SwapxError> {
                 })?;
             let hook = shell_hook::generate_hook(&shell_name)?;
             print!("{}", hook);
+            Ok(0)
+        }
+
+        Some(Commands::Suggest { check, auto }) => {
+            suggest::run_suggest(check, auto)?;
             Ok(0)
         }
 

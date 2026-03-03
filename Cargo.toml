@@ -1,6 +1,6 @@
 [package]
 name = "swapx"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "A command rewriter for your terminal — define rules that automatically transform commands before they execute"
 license = "MIT"
@@ -18,6 +18,7 @@ dialoguer = "0.11"
 dirs = "6"
 thiserror = "2"
 glob = "0.3"
+serde_json = "1"
 
 [dev-dependencies]
 assert_cmd = "2"
