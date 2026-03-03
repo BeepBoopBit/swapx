@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(name = "swapx", about = "Command rewriter CLI tool")]
+#[command(name = "swapx", about = "Command rewriter CLI tool", version)]
 pub struct Cli {
     /// Show the transformed command without executing
     #[arg(long)]
