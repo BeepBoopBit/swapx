@@ -195,12 +195,7 @@ pub fn resolve_prompts(
                 options
                     .first()
                     .cloned()
-                    .or_else(|| {
-                        prompt
-                            .default
-                            .as_ref()
-                            .map(|d| render_template(d, vars))
-                    })
+                    .or_else(|| prompt.default.as_ref().map(|d| render_template(d, vars)))
                     .unwrap_or_default()
             } else if options.is_empty() {
                 // No detected options, fall back to text input
@@ -473,7 +468,12 @@ mod tests {
 
         let cond_missing = DetectCondition {
             bin: None,
-            file: Some(dir.path().join("nonexistent.txt").to_string_lossy().to_string()),
+            file: Some(
+                dir.path()
+                    .join("nonexistent.txt")
+                    .to_string_lossy()
+                    .to_string(),
+            ),
             project: None,
         };
         assert!(detect_matches(&cond_missing).is_none());

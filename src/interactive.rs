@@ -42,7 +42,12 @@ pub fn resolve_pending_choices(
     for pending in &pending_choices {
         let idx = prompt_choice(pending)?;
         let with_value = &pending.rule.replace[idx].with_value;
-        result = engine::apply_choice(&result, &pending.matched_pattern, pending.rule.regex, with_value)?;
+        result = engine::apply_choice(
+            &result,
+            &pending.matched_pattern,
+            pending.rule.regex,
+            with_value,
+        )?;
     }
 
     Ok(result)
