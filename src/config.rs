@@ -152,13 +152,19 @@ fn write_or_prompt(
 pub fn init_config(overwrite: InitOverwrite) -> Result<Vec<InitAction>, SwapxError> {
     let config_dir = global_config_dir()
         .ok_or_else(|| SwapxError::Config("Cannot determine config directory".into()))?;
+    init_config_at(&config_dir, overwrite)
+}
 
+fn init_config_at(
+    config_dir: &Path,
+    overwrite: InitOverwrite,
+) -> Result<Vec<InitAction>, SwapxError> {
     let mut actions = Vec::new();
 
-    // Ensure ~/.config/swapx/ exists
-    fs::create_dir_all(&config_dir)?;
+    // Ensure config dir exists
+    fs::create_dir_all(config_dir)?;
 
-    // Write ~/.config/swapx/rules.yaml
+    // Write rules.yaml
     let rules_path = config_dir.join("rules.yaml");
     actions.push(write_or_prompt(
         &rules_path,
@@ -166,11 +172,11 @@ pub fn init_config(overwrite: InitOverwrite) -> Result<Vec<InitAction>, SwapxErr
         &overwrite,
     )?);
 
-    // Ensure ~/.config/swapx/suggestions.d/ exists
+    // Ensure suggestions.d/ exists
     let suggestions_dir = config_dir.join("suggestions.d");
     fs::create_dir_all(&suggestions_dir)?;
 
-    // Write ~/.config/swapx/suggestions.d/builtin.yaml
+    // Write suggestions.d/builtin.yaml
     let builtin_path = suggestions_dir.join("builtin.yaml");
     actions.push(write_or_prompt(
         &builtin_path,
@@ -213,12 +219,20 @@ pub fn global_config_dir() -> Option<PathBuf> {
 }
 
 pub fn reset_all() -> Result<Vec<PathBuf>, SwapxError> {
+    let global = global_config_dir();
+    let local = find_local_config();
+    reset_all_at(global.as_deref(), local.as_deref())
+}
+
+fn reset_all_at(
+    config_dir: Option<&Path>,
+    local_config: Option<&Path>,
+) -> Result<Vec<PathBuf>, SwapxError> {
     let mut deleted = Vec::new();
 
-    // Delete the entire ~/.config/swapx/ directory (all rules, suggestions, etc.)
-    if let Some(p) = global_config_dir() {
+    if let Some(p) = config_dir {
         if p.is_dir() {
-            for entry in fs::read_dir(&p)? {
+            for entry in fs::read_dir(p)? {
                 let entry = entry?;
                 let path = entry.path();
                 if path.is_dir() {
@@ -232,12 +246,11 @@ pub fn reset_all() -> Result<Vec<PathBuf>, SwapxError> {
         }
     }
 
-    // Local config (walk up from CWD)
-    if let Some(p) = find_local_config() {
+    if let Some(p) = local_config {
         if p.is_file() {
-            fs::remove_file(&p)?;
+            fs::remove_file(p)?;
             eprintln!("Deleted {}", p.display());
-            deleted.push(p);
+            deleted.push(p.to_path_buf());
         }
     }
 
@@ -285,23 +298,13 @@ pub fn save_rule(rule: Rule, local: bool) -> Result<PathBuf, SwapxError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
-    use std::sync::Mutex;
-
-    /// Tests that mutate XDG_CONFIG_HOME or CWD must hold this lock
-    /// to avoid racing each other.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn reset_all_deletes_existing_files() {
-        let _guard = ENV_LOCK.lock().unwrap();
-
-        // Set up a temp dir as XDG_CONFIG_HOME so global paths resolve there
         let tmp = tempfile::TempDir::new().unwrap();
         let config_dir = tmp.path().join("swapx");
         fs::create_dir_all(&config_dir).unwrap();
 
-        // Create various rule files (not just hardcoded names)
         let rules_path = config_dir.join("rules.yaml");
         fs::write(&rules_path, "rules: []\n").unwrap();
 
@@ -311,25 +314,14 @@ mod tests {
         let custom_path = config_dir.join("my-custom-rules.yaml");
         fs::write(&custom_path, "rules: []\n").unwrap();
 
-        // Create suggestions.d with a file inside
         let suggestions = config_dir.join("suggestions.d");
         fs::create_dir_all(&suggestions).unwrap();
         fs::write(suggestions.join("test.yaml"), "suggestions: []\n").unwrap();
 
-        // Create a local config in a temp working dir
-        let work_dir = tempfile::TempDir::new().unwrap();
-        let local_path = work_dir.path().join(".swapx.yaml");
+        let local_path = tmp.path().join(".swapx.yaml");
         fs::write(&local_path, "rules: []\n").unwrap();
 
-        // Override env vars and cwd so our functions find these paths
-        env::set_var("XDG_CONFIG_HOME", tmp.path());
-        let orig_dir = env::current_dir().unwrap();
-        env::set_current_dir(work_dir.path()).unwrap();
-
-        let deleted = reset_all().unwrap();
-
-        // Restore cwd
-        env::set_current_dir(&orig_dir).unwrap();
+        let deleted = reset_all_at(Some(&config_dir), Some(&local_path)).unwrap();
 
         // 3 files + 1 dir in config_dir + 1 local config = 5
         assert_eq!(deleted.len(), 5);
@@ -338,38 +330,27 @@ mod tests {
         assert!(!custom_path.exists());
         assert!(!suggestions.exists());
         assert!(!local_path.exists());
-        // The swapx dir itself should still exist (empty)
         assert!(config_dir.exists());
     }
 
     #[test]
     fn reset_all_returns_empty_when_nothing_exists() {
-        let _guard = ENV_LOCK.lock().unwrap();
-
         let tmp = tempfile::TempDir::new().unwrap();
-        env::set_var("XDG_CONFIG_HOME", tmp.path());
+        let config_dir = tmp.path().join("swapx");
+        let local_path = tmp.path().join(".swapx.yaml");
 
-        let work_dir = tempfile::TempDir::new().unwrap();
-        let orig_dir = env::current_dir().unwrap();
-        env::set_current_dir(work_dir.path()).unwrap();
-
-        let deleted = reset_all().unwrap();
-
-        env::set_current_dir(&orig_dir).unwrap();
+        let deleted = reset_all_at(Some(&config_dir), Some(&local_path)).unwrap();
 
         assert!(deleted.is_empty());
     }
 
     #[test]
     fn init_config_creates_expected_files() {
-        let _guard = ENV_LOCK.lock().unwrap();
-
         let tmp = tempfile::TempDir::new().unwrap();
-        env::set_var("XDG_CONFIG_HOME", tmp.path());
-
-        let actions = init_config(InitOverwrite::Error).unwrap();
-
         let config_dir = tmp.path().join("swapx");
+
+        let actions = init_config_at(&config_dir, InitOverwrite::Error).unwrap();
+
         assert!(config_dir.is_dir());
         assert!(config_dir.join("rules.yaml").is_file());
         assert!(config_dir.join("suggestions.d").is_dir());
@@ -378,21 +359,17 @@ mod tests {
             .join("builtin.yaml")
             .is_file());
 
-        // Should have 2 actions: rules.yaml + builtin.yaml
         assert_eq!(actions.len(), 2);
         assert!(matches!(&actions[0], InitAction::Created(_)));
         assert!(matches!(&actions[1], InitAction::Created(_)));
 
-        // rules.yaml should have empty rules list
         let rules_contents = fs::read_to_string(config_dir.join("rules.yaml")).unwrap();
         assert!(rules_contents.contains("rules: []"));
 
-        // builtin.yaml should contain valid suggestion YAML
         let builtin_contents =
             fs::read_to_string(config_dir.join("suggestions.d").join("builtin.yaml")).unwrap();
         assert!(builtin_contents.contains("suggestions:"));
 
-        // Verify the builtin YAML is parseable
         let file: crate::suggest::SuggestionFile =
             serde_yaml_ng::from_str(&builtin_contents).unwrap();
         assert!(!file.suggestions.is_empty());
@@ -400,16 +377,12 @@ mod tests {
 
     #[test]
     fn init_config_fails_if_already_exists() {
-        let _guard = ENV_LOCK.lock().unwrap();
-
         let tmp = tempfile::TempDir::new().unwrap();
-        env::set_var("XDG_CONFIG_HOME", tmp.path());
-
         let config_dir = tmp.path().join("swapx");
         fs::create_dir_all(&config_dir).unwrap();
         fs::write(config_dir.join("rules.yaml"), "rules: []\n").unwrap();
 
-        let result = init_config(InitOverwrite::Error);
+        let result = init_config_at(&config_dir, InitOverwrite::Error);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("already exists"));
@@ -417,26 +390,20 @@ mod tests {
 
     #[test]
     fn init_config_force_replaces_files() {
-        let _guard = ENV_LOCK.lock().unwrap();
-
         let tmp = tempfile::TempDir::new().unwrap();
-        env::set_var("XDG_CONFIG_HOME", tmp.path());
-
         let config_dir = tmp.path().join("swapx");
         let suggestions_dir = config_dir.join("suggestions.d");
         fs::create_dir_all(&suggestions_dir).unwrap();
 
-        // Pre-create files with custom content
         fs::write(config_dir.join("rules.yaml"), "rules: [custom]\n").unwrap();
         fs::write(suggestions_dir.join("builtin.yaml"), "old content\n").unwrap();
 
-        let actions = init_config(InitOverwrite::Force).unwrap();
+        let actions = init_config_at(&config_dir, InitOverwrite::Force).unwrap();
 
         assert_eq!(actions.len(), 2);
         assert!(matches!(&actions[0], InitAction::Replaced(_)));
         assert!(matches!(&actions[1], InitAction::Replaced(_)));
 
-        // Files should now contain defaults
         let rules_contents = fs::read_to_string(config_dir.join("rules.yaml")).unwrap();
         assert!(rules_contents.contains("rules: []"));
 
