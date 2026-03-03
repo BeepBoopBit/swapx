@@ -31,7 +31,7 @@ pub enum Commands {
     /// List all active rules
     List,
 
-    /// Create a .swapx.yaml in the current directory
+    /// Initialize global swapx config and install builtin suggestion packs
     Init,
 
     /// Enable a rule by its match pattern
@@ -58,6 +58,9 @@ pub enum Commands {
         #[arg(trailing_var_arg = true, num_args = 1..)]
         command: Vec<String>,
     },
+
+    /// Reset all swapx configuration (global, local, and suggestion packs)
+    Reset,
 
     /// Scan system and suggest rules based on installed tools and project files
     Suggest {

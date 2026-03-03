@@ -209,8 +209,10 @@ fn run() -> Result<i32, SwapxError> {
         }
 
         Some(Commands::Init) => {
-            let path = config::init_local_config()?;
-            eprintln!("Created {}", path.display());
+            let created = config::init_config()?;
+            for path in &created {
+                eprintln!("Created {}", path.display());
+            }
             Ok(0)
         }
 
@@ -236,6 +238,30 @@ fn run() -> Result<i32, SwapxError> {
                 })?;
             let hook = shell_hook::generate_hook(&shell_name)?;
             print!("{}", hook);
+            Ok(0)
+        }
+
+        Some(Commands::Reset) => {
+            if !is_tty {
+                return Err(SwapxError::Config(
+                    "reset requires interactive confirmation".into(),
+                ));
+            }
+            let confirm = dialoguer::Confirm::new()
+                .with_prompt("This will delete all swapx configuration (global, local, and suggestion packs). Are you sure?")
+                .default(false)
+                .interact()
+                .map_err(|e| SwapxError::Config(format!("prompt failed: {}", e)))?;
+            if confirm {
+                let deleted = config::reset_all()?;
+                if deleted.is_empty() {
+                    eprintln!("No configuration found to delete.");
+                } else {
+                    eprintln!("Reset complete. Deleted {} item(s).", deleted.len());
+                }
+            } else {
+                eprintln!("Reset cancelled.");
+            }
             Ok(0)
         }
 

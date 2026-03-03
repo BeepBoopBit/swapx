@@ -23,28 +23,39 @@ fn init_creates_config_file() {
 
     swapx()
         .arg("init")
-        .current_dir(dir.path())
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
         .assert()
         .success()
         .stderr(predicate::str::contains("Created"));
 
-    let config_path = dir.path().join(".swapx.yaml");
-    assert!(config_path.exists());
+    let config_dir = dir.path().join(".config").join("swapx");
+    assert!(config_dir.is_dir());
 
-    let contents = fs::read_to_string(&config_path).unwrap();
-    assert!(contents.contains("git checkout"));
-    assert!(contents.contains("git switch"));
-    assert!(contents.contains("python"));
+    let rules_path = config_dir.join("rules.yaml");
+    assert!(rules_path.exists());
+
+    let suggestions_dir = config_dir.join("suggestions.d");
+    assert!(suggestions_dir.is_dir());
+
+    let builtin_path = suggestions_dir.join("builtin.yaml");
+    assert!(builtin_path.exists());
+
+    let builtin_contents = fs::read_to_string(&builtin_path).unwrap();
+    assert!(builtin_contents.contains("suggestions:"));
+    assert!(builtin_contents.contains("cat-to-bat"));
 }
 
 #[test]
 fn init_fails_if_config_exists() {
     let dir = TempDir::new().unwrap();
-    fs::write(dir.path().join(".swapx.yaml"), "rules: []").unwrap();
+    let config_dir = dir.path().join(".config").join("swapx");
+    fs::create_dir_all(&config_dir).unwrap();
 
     swapx()
         .arg("init")
-        .current_dir(dir.path())
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
         .assert()
         .failure()
         .stderr(predicate::str::contains("already exists"));
@@ -582,17 +593,28 @@ fn init_creates_valid_yaml() {
 
     swapx()
         .arg("init")
-        .current_dir(dir.path())
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
         .assert()
         .success();
 
-    // The generated config should be valid enough to use with list
-    swapx()
-        .arg("list")
+    // The installed suggestions should be loadable by suggest --check
+    let result = swapx()
+        .args(["suggest", "--check"])
         .current_dir(dir.path())
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
         .assert()
-        .success()
-        .stderr(predicate::str::contains("git checkout").and(predicate::str::contains("python")));
+        .success();
+
+    // Should show either suggestions or "No suggestions found" (depending on installed tools)
+    let output = result.get_output();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("suggestion") || stderr.contains("No suggestions found"),
+        "expected suggestion output, got: {}",
+        stderr
+    );
 }
 
 // ─── --cmd flag ───
@@ -1185,10 +1207,17 @@ fn plk_config_rule_with_dir_not_matching_cwd_skips() {
 // ─── suggest ───
 
 #[test]
-fn suggest_check_shows_suggestions() {
-    // `sh` should always be on PATH, but our built-in suggestions look for bat/eza/rg/fd/dust.
-    // We test that --check at least runs without error and shows the expected output format.
+fn suggest_check_shows_suggestions_after_init() {
+    // After init, suggestion packs are on disk. --check should at least run without error.
     let dir = TempDir::new().unwrap();
+
+    // First run init to install builtin suggestions
+    swapx()
+        .arg("init")
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
+        .assert()
+        .success();
 
     let result = swapx()
         .args(["suggest", "--check"])
@@ -1273,6 +1302,29 @@ fn suggest_no_suggestions() {
         .assert()
         .success()
         .stderr(predicate::str::contains("No suggestions found"));
+}
+
+// ─── reset ───
+
+#[test]
+fn reset_requires_interactive_confirmation() {
+    // In test, stdin is not a TTY, so reset should refuse
+    swapx()
+        .arg("reset")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "reset requires interactive confirmation",
+        ));
+}
+
+#[test]
+fn reset_shows_in_help() {
+    swapx()
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("reset").or(predicate::str::contains("Reset")));
 }
 
 // ─── dir field ───

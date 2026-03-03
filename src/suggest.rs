@@ -225,16 +225,6 @@ pub fn resolve_prompts(
     Ok(())
 }
 
-// ─── Built-in suggestions ───
-
-const BUILTIN_YAML: &str = include_str!("../suggestions/builtin.yaml");
-
-pub fn builtin_suggestions() -> Vec<SuggestionDef> {
-    let file: SuggestionFile =
-        serde_yaml_ng::from_str(BUILTIN_YAML).expect("builtin suggestions YAML is invalid");
-    file.suggestions
-}
-
 // ─── Suggestion pack loading ───
 
 pub fn load_suggestion_packs() -> Vec<SuggestionDef> {
@@ -310,9 +300,8 @@ pub fn suggestion_to_rules(
 // ─── Main flow ───
 
 pub fn run_suggest(check: bool, auto: bool) -> Result<(), SwapxError> {
-    // 1. Gather built-in + pack suggestions
-    let mut all_suggestions = builtin_suggestions();
-    all_suggestions.extend(load_suggestion_packs());
+    // 1. Gather suggestion packs from disk
+    let all_suggestions = load_suggestion_packs();
 
     // 2. Run detection, filter to applicable
     let mut applicable: Vec<(SuggestionDef, String)> = Vec::new();
@@ -550,25 +539,6 @@ mod tests {
         assert_eq!(rules[0].replace[1].label, "run directly");
         assert_eq!(rules[0].replace[1].with_value, "pnpm run dev");
         assert!(rules[0].replace[1].default);
-    }
-
-    #[test]
-    fn test_builtin_suggestions_valid() {
-        let builtins = builtin_suggestions();
-        assert!(!builtins.is_empty());
-        for s in &builtins {
-            assert!(!s.name.is_empty(), "name should not be empty");
-            assert!(!s.description.is_empty(), "description should not be empty");
-            assert!(
-                s.detect.bin.is_some() || s.detect.file.is_some() || s.detect.project.is_some(),
-                "detect should have at least one condition"
-            );
-            assert!(!s.rules.is_empty(), "should have at least one rule");
-            for rule in &s.rules {
-                assert!(!rule.match_pattern.is_empty());
-                assert!(!rule.replace.is_empty());
-            }
-        }
     }
 
     #[test]
