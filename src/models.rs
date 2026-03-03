@@ -57,6 +57,9 @@ pub struct Rule {
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+
     pub replace: Vec<Replacement>,
 }
 

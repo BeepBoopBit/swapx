@@ -141,6 +141,7 @@ pub fn add_rule_wizard() -> Result<(), SwapxError> {
         match_patterns: vec![match_pattern],
         regex: is_regex,
         enabled: true,
+        dir: None,
         replace: replacements,
     };
 
@@ -172,6 +173,9 @@ pub fn list_rules(config: &ConfigFile) {
             patterns_display.join(", "),
             disabled
         );
+        if let Some(ref dir) = rule.dir {
+            eprintln!("     dir: \"{}\"", dir);
+        }
         for repl in &rule.replace {
             let default_marker = if repl.default { " (default)" } else { "" };
             let when_marker = if let Some(ref when) = repl.when {
@@ -220,6 +224,14 @@ pub fn display_explain(command: &str, matches: &[ExplainMatch]) {
             patterns_display.join(", "),
             m.matched_pattern
         );
+        if let Some(ref dir) = m.rule.dir {
+            let dir_status = match m.dir_matches {
+                Some(true) => "MATCHES",
+                Some(false) => "no match",
+                None => "",
+            };
+            eprintln!("  dir: \"{}\" → {}", dir, dir_status);
+        }
 
         for repl in &m.replacements {
             let default_marker = if repl.is_default { " (default)" } else { "" };

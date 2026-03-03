@@ -1080,3 +1080,156 @@ fn shell_hook_nushell_contains_list_choices() {
             predicate::str::contains("--list-choices").and(predicate::str::contains("--choice")),
         );
 }
+
+// ─── rules.plk.yaml loading ───
+
+#[test]
+fn plk_config_is_loaded() {
+    let dir = TempDir::new().unwrap();
+    let config_dir = dir.path().join(".config").join("swapx");
+    fs::create_dir_all(&config_dir).unwrap();
+
+    // Write a rules.plk.yaml with a rule
+    fs::write(
+        config_dir.join("rules.plk.yaml"),
+        r#"rules:
+  - match: "cd swapx"
+    dir: /some/path
+    replace:
+      - label: "plk: swapx-edit"
+        with: "plk run swapx-edit"
+      - label: "just cd swapx"
+        with: "cd swapx"
+        default: true
+"#,
+    )
+    .unwrap();
+
+    // list should show the plk rule
+    swapx()
+        .arg("list")
+        .current_dir(dir.path())
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
+        .assert()
+        .success()
+        .stderr(
+            predicate::str::contains("cd swapx")
+                .and(predicate::str::contains("plk: swapx-edit"))
+                .and(predicate::str::contains("dir: \"/some/path\"")),
+        );
+}
+
+#[test]
+fn plk_config_rule_with_dir_matching_cwd_applies() {
+    let dir = TempDir::new().unwrap();
+    let config_dir = dir.path().join(".config").join("swapx");
+    fs::create_dir_all(&config_dir).unwrap();
+
+    // Rule with dir matching the temp directory
+    let dir_path = dir.path().to_string_lossy().to_string();
+    fs::write(
+        config_dir.join("rules.plk.yaml"),
+        format!(
+            r#"rules:
+  - match: "git checkout"
+    dir: "{}"
+    replace:
+      - label: use-switch
+        with: "git switch"
+"#,
+            dir_path
+        ),
+    )
+    .unwrap();
+
+    swapx()
+        .args(["--dry-run", "--cmd", "git checkout main"])
+        .current_dir(dir.path())
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("git switch main"));
+}
+
+#[test]
+fn plk_config_rule_with_dir_not_matching_cwd_skips() {
+    let dir = TempDir::new().unwrap();
+    let config_dir = dir.path().join(".config").join("swapx");
+    fs::create_dir_all(&config_dir).unwrap();
+
+    // Rule with dir NOT matching the temp directory
+    fs::write(
+        config_dir.join("rules.plk.yaml"),
+        r#"rules:
+  - match: "git checkout"
+    dir: /nonexistent/path
+    replace:
+      - label: use-switch
+        with: "git switch"
+"#,
+    )
+    .unwrap();
+
+    swapx()
+        .args(["--dry-run", "--cmd", "git checkout main"])
+        .current_dir(dir.path())
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("git checkout main"));
+}
+
+// ─── dir field ───
+
+#[test]
+fn list_shows_dir_field() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "cd project"
+    dir: /home/user/projects
+    replace:
+      - label: goto
+        with: "cd /home/user/projects"
+"#,
+    );
+
+    swapx()
+        .arg("list")
+        .current_dir(dir.path())
+        .assert()
+        .success()
+        .stderr(
+            predicate::str::contains("cd project")
+                .and(predicate::str::contains("dir: \"/home/user/projects\"")),
+        );
+}
+
+#[test]
+fn explain_shows_dir_field() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "cd project"
+    dir: /nonexistent/dir
+    replace:
+      - label: goto
+        with: "cd /home/user/projects"
+"#,
+    );
+
+    swapx()
+        .args(["explain", "cd", "project"])
+        .current_dir(dir.path())
+        .assert()
+        .success()
+        .stderr(
+            predicate::str::contains("dir: \"/nonexistent/dir\"")
+                .and(predicate::str::contains("no match")),
+        );
+}

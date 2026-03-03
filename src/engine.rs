@@ -48,6 +48,12 @@ pub fn apply_rules(
             continue;
         }
 
+        if let Some(ref dir) = rule.dir {
+            if !check_dir(dir) {
+                continue;
+            }
+        }
+
         let matched_pattern = match find_matching_pattern(&result, rule)? {
             Some(p) => p,
             None => continue,
@@ -131,6 +137,15 @@ fn do_replace(
     }
 }
 
+/// Check if CWD equals or is a subdirectory of the given dir path.
+fn check_dir(dir: &str) -> bool {
+    let dir_path = std::path::Path::new(dir);
+    match std::env::current_dir() {
+        Ok(cwd) => cwd.starts_with(dir_path),
+        Err(_) => false,
+    }
+}
+
 fn expand_tilde(path: &str) -> String {
     if path.starts_with("~/") {
         if let Some(home) = dirs::home_dir() {
@@ -204,6 +219,8 @@ pub struct ExplainMatch {
     /// The specific pattern that matched
     pub matched_pattern: String,
     pub is_enabled: bool,
+    /// None if no dir set, Some(true/false) if dir is set
+    pub dir_matches: Option<bool>,
     pub replacements: Vec<ExplainReplacement>,
 }
 
@@ -232,10 +249,13 @@ pub fn explain_rules(command: &str, rules: &[Rule]) -> Result<Vec<ExplainMatch>,
             });
         }
 
+        let dir_matches = rule.dir.as_ref().map(|d| check_dir(d));
+
         matches.push(ExplainMatch {
             rule: rule.clone(),
             matched_pattern,
             is_enabled: rule.enabled,
+            dir_matches,
             replacements,
         });
     }
@@ -258,6 +278,7 @@ mod tests {
             match_patterns: vec![pattern.into()],
             regex,
             enabled,
+            dir: None,
             replace: replacements,
         }
     }
@@ -406,6 +427,7 @@ mod tests {
             match_patterns: vec!["npm install".into(), "npm run".into()],
             regex: false,
             enabled: true,
+            dir: None,
             replace: vec![make_repl("pnpm", "pnpm install", false)],
         }];
 
@@ -420,6 +442,7 @@ mod tests {
             match_patterns: vec!["npm install".into(), "npm run".into()],
             regex: false,
             enabled: true,
+            dir: None,
             replace: vec![make_repl("pnpm", "pnpm run", false)],
         }];
 
@@ -434,6 +457,7 @@ mod tests {
             match_patterns: vec!["npm install".into(), "npm run".into()],
             regex: false,
             enabled: true,
+            dir: None,
             replace: vec![make_repl("pnpm", "pnpm install", false)],
         }];
 
@@ -448,6 +472,7 @@ mod tests {
             match_patterns: vec!["npm install".into(), "npm run".into()],
             regex: false,
             enabled: true,
+            dir: None,
             replace: vec![
                 make_repl("pnpm", "pnpm run", false),
                 make_repl("yarn", "yarn run", false),
@@ -457,5 +482,51 @@ mod tests {
         let result = apply_rules("npm run build", &rules, false).unwrap();
         assert_eq!(result.pending_choices.len(), 1);
         assert_eq!(result.pending_choices[0].matched_pattern, "npm run");
+    }
+
+    #[test]
+    fn dir_matching_cwd_applies_rule() {
+        let cwd = std::env::current_dir().unwrap();
+        let rules = vec![Rule {
+            match_patterns: vec!["git checkout".into()],
+            regex: false,
+            enabled: true,
+            dir: Some(cwd.to_string_lossy().into_owned()),
+            replace: vec![make_repl("use-switch", "git switch", false)],
+        }];
+
+        let result = apply_rules("git checkout main", &rules, false).unwrap();
+        assert!(result.changed);
+        assert_eq!(result.command, "git switch main");
+    }
+
+    #[test]
+    fn dir_not_matching_cwd_skips_rule() {
+        let rules = vec![Rule {
+            match_patterns: vec!["git checkout".into()],
+            regex: false,
+            enabled: true,
+            dir: Some("/nonexistent/path/that/does/not/match".into()),
+            replace: vec![make_repl("use-switch", "git switch", false)],
+        }];
+
+        let result = apply_rules("git checkout main", &rules, false).unwrap();
+        assert!(!result.changed);
+        assert_eq!(result.command, "git checkout main");
+    }
+
+    #[test]
+    fn dir_none_applies_rule_everywhere() {
+        let rules = vec![Rule {
+            match_patterns: vec!["git checkout".into()],
+            regex: false,
+            enabled: true,
+            dir: None,
+            replace: vec![make_repl("use-switch", "git switch", false)],
+        }];
+
+        let result = apply_rules("git checkout main", &rules, false).unwrap();
+        assert!(result.changed);
+        assert_eq!(result.command, "git switch main");
     }
 }

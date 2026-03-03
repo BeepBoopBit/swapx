@@ -9,6 +9,10 @@ pub fn global_config_path() -> Option<PathBuf> {
     dirs::config_dir().map(|d| d.join("swapx").join("rules.yaml"))
 }
 
+pub fn global_plk_config_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|d| d.join("swapx").join("rules.plk.yaml"))
+}
+
 pub fn find_local_config() -> Option<PathBuf> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
@@ -49,6 +53,16 @@ pub fn load_merged_config() -> Result<ConfigFile, SwapxError> {
         }
     }
 
+    // Load global plk config (overrides global rules with same match key)
+    if let Some(plk_path) = global_plk_config_path() {
+        if plk_path.is_file() {
+            let plk = load_config_file(&plk_path)?;
+            for rule in plk.rules {
+                rules_map.insert(rule_merge_key(&rule), rule);
+            }
+        }
+    }
+
     // Local config overrides global by match pattern
     if let Some(local_path) = find_local_config() {
         let local = load_config_file(&local_path)?;
@@ -75,6 +89,7 @@ pub fn init_local_config() -> Result<PathBuf, SwapxError> {
                 match_patterns: vec!["git checkout".into()],
                 regex: false,
                 enabled: true,
+                dir: None,
                 replace: vec![crate::models::Replacement {
                     label: "use-switch".into(),
                     with_value: "git switch".into(),
@@ -86,6 +101,7 @@ pub fn init_local_config() -> Result<PathBuf, SwapxError> {
                 match_patterns: vec!["python ".into()],
                 regex: false,
                 enabled: true,
+                dir: None,
                 replace: vec![crate::models::Replacement {
                     label: "use-python3".into(),
                     with_value: "python3 ".into(),
