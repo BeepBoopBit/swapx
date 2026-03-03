@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use assert_cmd::Command as AssertCommand;
 use predicates::prelude::*;
@@ -9,10 +10,23 @@ fn swapx() -> AssertCommand {
     AssertCommand::cargo_bin("swapx").unwrap()
 }
 
-fn create_config(dir: &TempDir, yaml: &str) -> std::path::PathBuf {
+fn create_config(dir: &TempDir, yaml: &str) -> PathBuf {
     let path = dir.path().join(".swapx.yaml");
     fs::write(&path, yaml).unwrap();
     path
+}
+
+/// Returns the swapx config dir that `dirs::config_dir()` resolves to for a given HOME.
+/// On macOS: $HOME/Library/Application Support/swapx
+/// On Linux/other: $HOME/.config/swapx
+fn swapx_config_dir(home: &Path) -> PathBuf {
+    if cfg!(target_os = "macos") {
+        home.join("Library")
+            .join("Application Support")
+            .join("swapx")
+    } else {
+        home.join(".config").join("swapx")
+    }
 }
 
 // ─── init ───
@@ -29,7 +43,7 @@ fn init_creates_config_file() {
         .success()
         .stderr(predicate::str::contains("Created"));
 
-    let config_dir = dir.path().join(".config").join("swapx");
+    let config_dir = swapx_config_dir(dir.path());
     assert!(config_dir.is_dir());
 
     let rules_path = config_dir.join("rules.yaml");
@@ -49,7 +63,7 @@ fn init_creates_config_file() {
 #[test]
 fn init_force_replaces_existing() {
     let dir = TempDir::new().unwrap();
-    let config_dir = dir.path().join(".config").join("swapx");
+    let config_dir = swapx_config_dir(dir.path());
     let suggestions_dir = config_dir.join("suggestions.d");
     fs::create_dir_all(&suggestions_dir).unwrap();
 
@@ -76,7 +90,7 @@ fn init_force_replaces_existing() {
 #[test]
 fn init_non_tty_errors_if_exists() {
     let dir = TempDir::new().unwrap();
-    let config_dir = dir.path().join(".config").join("swapx");
+    let config_dir = swapx_config_dir(dir.path());
     fs::create_dir_all(&config_dir).unwrap();
     fs::write(config_dir.join("rules.yaml"), "rules: []\n").unwrap();
 
@@ -1137,7 +1151,7 @@ fn shell_hook_nushell_contains_list_choices() {
 #[test]
 fn plk_config_is_loaded() {
     let dir = TempDir::new().unwrap();
-    let config_dir = dir.path().join(".config").join("swapx");
+    let config_dir = swapx_config_dir(dir.path());
     fs::create_dir_all(&config_dir).unwrap();
 
     // Write a rules.plk.yaml with a rule
@@ -1174,7 +1188,7 @@ fn plk_config_is_loaded() {
 #[test]
 fn plk_config_rule_with_dir_matching_cwd_applies() {
     let dir = TempDir::new().unwrap();
-    let config_dir = dir.path().join(".config").join("swapx");
+    let config_dir = swapx_config_dir(dir.path());
     fs::create_dir_all(&config_dir).unwrap();
 
     // Rule with dir matching the temp directory
@@ -1207,7 +1221,7 @@ fn plk_config_rule_with_dir_matching_cwd_applies() {
 #[test]
 fn plk_config_rule_with_dir_not_matching_cwd_skips() {
     let dir = TempDir::new().unwrap();
-    let config_dir = dir.path().join(".config").join("swapx");
+    let config_dir = swapx_config_dir(dir.path());
     fs::create_dir_all(&config_dir).unwrap();
 
     // Rule with dir NOT matching the temp directory
@@ -1269,7 +1283,7 @@ fn suggest_check_shows_suggestions_after_init() {
 #[test]
 fn suggest_auto_creates_rules() {
     let dir = TempDir::new().unwrap();
-    let config_dir = dir.path().join(".config").join("swapx");
+    let config_dir = swapx_config_dir(dir.path());
     fs::create_dir_all(&config_dir).unwrap();
 
     // Create a suggestion pack that detects "sh" (always available)
