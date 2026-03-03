@@ -13,7 +13,7 @@ swapx --dry-run git clone git@github.com:user/repo.git
 
 ### `--cmd <COMMAND>`
 
-Pass a command string directly instead of using positional arguments or stdin. This keeps stdin connected to the terminal, enabling interactive prompts (e.g., dialoguer selectors) when a rule has multiple replacement options.
+Pass a command string directly instead of using positional arguments or stdin. This keeps stdin connected to the terminal, enabling interactive prompts when a rule has multiple replacement options.
 
 ```sh
 swapx --cmd "git clone git@github.com:user/repo.git"
@@ -24,17 +24,48 @@ swapx --dry-run --cmd "git clone git@github.com:user/repo.git"
 # Same, but prints the result instead of executing
 ```
 
-This is primarily used by shell hooks internally. Cannot be combined with a subcommand.
+Cannot be combined with a subcommand.
 
-**Exit codes when used with `--dry-run`:**
+### `--list-choices`
+
+Requires `--cmd`. Detects pending choices without resolving them.
+
+- **No pending choices** → stdout = transformed command, exit 0
+- **Pending choices** → stdout = tab-separated choice data, exit 20
+
+Output format when exit 20:
+
+```
+partially_transformed_command
+MATCH_PATTERN\tDEFAULT_INDEX\tLABEL1\tLABEL2\t...
+```
+
+Line 1 is the command with auto-resolved rules applied (pending ones untouched). Lines 2+ describe each pending choice. Default index is `-1` if no default exists.
+
+### `--choice <INDICES>`
+
+Requires `--cmd`. Applies the user's selection from a previous `--list-choices` call. Takes comma-separated 0-based indices (e.g. `"1"` or `"1,0"` for multiple pending rules). Implies dry-run behavior.
+
+```sh
+# List available choices
+swapx --cmd "echo melon" --list-choices
+# exit 20, outputs: echo melon\nmelon\t-1\twater\tpapaya
+
+# Apply choice index 1 (papaya)
+swapx --cmd "echo melon" --choice 1
+# outputs: echo papaya
+```
+
+`--list-choices` and `--choice` are mutually exclusive. Neither works with subcommands.
+
+**Exit codes:**
 
 | Code | Meaning |
 |------|---------|
-| 0 | No change, or transformation was auto-applied (default/when match) |
-| 10 | User made an interactive selection via the dialoguer prompt |
+| 0 | No change, or transformation was applied |
+| 10 | User made an interactive selection via dialoguer (direct TTY usage) |
+| 20 | Pending choices exist (returned by `--list-choices`) |
 | 1 | Error |
-
-Shell hooks use exit code 10 to auto-apply the result without double-prompting the user.
 
 ## Subcommands
 
@@ -159,12 +190,13 @@ swapx shell-hook nu                                   # nushell — follow print
 
 Supported shells: `zsh`, `bash`, `fish`, `powershell` (alias: `pwsh`), `nu` (alias: `nushell`).
 
-The generated hooks use `swapx --dry-run --cmd "$BUFFER"` to transform commands. This passes the command as a single string argument (avoiding word-splitting issues with special characters) and keeps stdin as the terminal so interactive selectors work. The hook checks the exit code:
+The generated hooks use a two-phase protocol to handle interactive selection:
 
-- **Exit 10** — user already chose via an interactive prompt; the hook auto-applies the transformation
-- **Exit 0** + command changed — the hook shows the transformation and prompts "Apply? [Y/n]" (or auto-applies if `SWAPX_AUTO_APPLY=1`)
-- **Exit 0** + command unchanged — no transformation; command runs as-is
-- **Exit 1** — error; command runs as-is
+1. **Phase 1:** `swapx --dry-run --cmd "$BUFFER" --list-choices` — detects pending choices
+2. **Exit 20** — pending choices exist; the hook parses the tab-separated output, shows a shell-native numbered menu, reads the user's selection, then calls phase 2
+3. **Phase 2:** `swapx --dry-run --cmd "$BUFFER" --choice "$idx"` — applies the selected indices and auto-applies the result
+4. **Exit 0** + command changed — no pending choices; the hook shows the transformation and prompts "Apply? [Y/n]" (or auto-applies if `SWAPX_AUTO_APPLY=1`)
+5. **Exit 0** + command unchanged — no transformation; command runs as-is
 
 **Environment variables:**
 

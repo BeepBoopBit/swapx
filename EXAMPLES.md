@@ -313,13 +313,14 @@ swapx: git checkout main
 Apply? [Y/n]
 ```
 
-When a rule has multiple replacement options and no default or `when` condition matches, you'll see an interactive selector directly in your shell:
+When a rule has multiple replacement options and no default or `when` condition matches, you'll see a numbered menu directly in your shell:
 
 ```
 $ git clone git@github.com:user/repo.git
 Choose replacement for 'git@github.com:':
-> personal
-  work
+  1) personal
+  2) work
+#? 1
 ```
 
 After you select an option, the transformation is auto-applied (no extra "Apply?" prompt since you already chose).

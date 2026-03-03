@@ -9,13 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `--cmd <COMMAND>` flag — pass a command string directly, keeping stdin as the terminal so interactive prompts (dialoguer selectors) work from shell hooks
-- Exit code 10 semantics — signals the user already made an interactive selection, so shell hooks auto-apply without double-prompting
+- `--cmd <COMMAND>` flag — pass a command string directly, preserving stdin as TTY for interactive prompts
+- `--list-choices` flag — output pending choices as tab-separated lines (exit 20) for shell hooks to parse
+- `--choice <INDICES>` flag — apply comma-separated 0-based choice indices selected by the user
+- Two-phase interactive selection protocol — shell hooks show native numbered menus when a rule has multiple replacements with no default or matching `when` condition
+- Exit code 10 — signals the user made an interactive selection via dialoguer (direct TTY usage)
+- Exit code 20 — signals pending choices that the caller must resolve (used by `--list-choices`)
 
 ### Changed
 
-- Shell hooks now use `swapx --dry-run --cmd "$BUFFER"` instead of piping through `echo "$BUFFER" | swapx 2>/dev/null`, enabling interactive replacement selection directly in the shell
-- Shell hooks no longer suppress stderr with `2>/dev/null`, allowing dialoguer prompts to display
+- Shell hooks now use a two-phase protocol: `--list-choices` to detect pending choices, then `--choice` to apply the user's selection via shell-native numbered menus
+- Shell hooks read from `/dev/tty` in zsh/bash to avoid buffered stdin issues inside widget/trap contexts
 
 ### Fixed
 

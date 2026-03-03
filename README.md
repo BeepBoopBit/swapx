@@ -23,7 +23,7 @@ swapx sits in front of your shell and rewrites commands before they execute, bas
 - **Explain mode** — debug which rules match and preview what they'd produce
 - **Enable/disable rules** — toggle rules on and off without deleting them
 - **Dry-run mode** — see the transformed command without executing
-- **`--cmd` flag** — pass commands directly so shell hooks can show interactive prompts
+- **Two-phase selection** — `--list-choices` and `--choice` flags let shell hooks show native numbered menus for multi-option rules
 - **Pipe mode** — use swapx as a filter in pipelines (`echo "cmd" | swapx`)
 
 ## Install
@@ -157,7 +157,7 @@ Invoke-Expression (swapx shell-hook powershell)
 swapx shell-hook nu
 ```
 
-Shell hooks use `swapx --dry-run --cmd "$BUFFER"` internally. This keeps stdin connected to the terminal, so when a rule has multiple replacement options and no `when` condition or default matches, you'll see an interactive selector directly in your shell. If you make a selection, swapx exits with code 10 and the hook auto-applies the result without double-prompting.
+Shell hooks use a two-phase protocol internally. First, `swapx --list-choices` detects pending choices. If any exist (exit 20), the hook shows a shell-native numbered menu, reads your selection, then applies it via `swapx --choice`. If no choices are pending (exit 0), the hook shows the transformation and prompts "Apply? [Y/n]".
 
 Set `SWAPX_AUTO_APPLY=1` to skip the confirmation prompt for non-interactive transformations.
 
