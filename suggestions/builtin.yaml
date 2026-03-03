@@ -1,0 +1,247 @@
+suggestions:
+  - name: cat-to-bat
+    description: Replace cat with bat for syntax highlighting
+    detect:
+      bin: bat
+    rules:
+      - match: "cat "
+        replace:
+          - label: use bat
+            with: "bat "
+            default: true
+          - label: keep original
+            with: "cat "
+
+  - name: ls-to-eza
+    description: Replace ls with eza for better file listing
+    detect:
+      bin: eza
+    rules:
+      - match: "ls"
+        replace:
+          - label: use eza
+            with: "eza"
+            default: true
+          - label: keep original
+            with: "ls"
+
+  - name: grep-to-rg
+    description: Replace grep with ripgrep for faster searching
+    detect:
+      bin: rg
+    rules:
+      - match: "grep "
+        replace:
+          - label: use rg
+            with: "rg "
+            default: true
+          - label: keep original
+            with: "grep "
+
+  - name: find-to-fd
+    description: Replace find with fd for simpler syntax
+    detect:
+      bin: fd
+    rules:
+      - match: "find "
+        replace:
+          - label: use fd
+            with: "fd "
+            default: true
+          - label: keep original
+            with: "find "
+
+  - name: du-to-dust
+    description: Replace du with dust for better disk usage display
+    detect:
+      bin: dust
+    rules:
+      - match: "du "
+        replace:
+          - label: use dust
+            with: "dust "
+            default: true
+          - label: keep original
+            with: "du "
+
+  - name: sed-to-sd
+    description: Replace sed with sd for simpler find-and-replace
+    detect:
+      bin: sd
+    rules:
+      - match: "sed "
+        replace:
+          - label: use sd
+            with: "sd "
+            default: true
+          - label: keep original
+            with: "sed "
+
+  - name: df-to-duf
+    description: Replace df with duf for better disk free output
+    detect:
+      bin: duf
+    rules:
+      - match: "df"
+        replace:
+          - label: use duf
+            with: "duf"
+            default: true
+          - label: keep original
+            with: "df"
+
+  - name: ps-to-procs
+    description: Replace ps with procs for a better process viewer
+    detect:
+      bin: procs
+    rules:
+      - match: "ps "
+        replace:
+          - label: use procs
+            with: "procs "
+            default: true
+          - label: keep original
+            with: "ps "
+
+  - name: top-to-btop
+    description: Replace top with btop for a modern system monitor
+    detect:
+      bin: btop
+    rules:
+      - match: "top"
+        replace:
+          - label: use btop
+            with: "btop"
+            default: true
+          - label: keep original
+            with: "top"
+
+  - name: vim-to-nvim
+    description: Replace vim with neovim
+    detect:
+      bin: nvim
+    rules:
+      - match: "vim "
+        replace:
+          - label: use nvim
+            with: "nvim "
+            default: true
+          - label: keep original
+            with: "vim "
+
+  - name: man-to-tldr
+    description: Replace man with tldr for concise command help
+    detect:
+      bin: tldr
+    rules:
+      - match: "man "
+        replace:
+          - label: use tldr
+            with: "tldr "
+            default: true
+          - label: keep original
+            with: "man "
+
+  - name: rm-to-trash
+    description: Replace rm with trash-put for safer deletes
+    detect:
+      bin: trash-put
+    rules:
+      - match: "rm "
+        replace:
+          - label: use trash-put
+            with: "trash-put "
+            default: true
+          - label: keep original
+            with: "rm "
+
+  - name: hexdump-to-hexyl
+    description: Replace hexdump with hexyl for colorized hex output
+    detect:
+      bin: hexyl
+    rules:
+      - match: "hexdump "
+        replace:
+          - label: use hexyl
+            with: "hexyl "
+            default: true
+          - label: keep original
+            with: "hexdump "
+
+  - name: ping-to-gping
+    description: Replace ping with gping for graphical ping
+    detect:
+      bin: gping
+    rules:
+      - match: "ping "
+        replace:
+          - label: use gping
+            with: "gping "
+            default: true
+          - label: keep original
+            with: "ping "
+
+  - name: dig-to-dog
+    description: Replace dig with dog for friendlier DNS lookups
+    detect:
+      bin: dog
+    rules:
+      - match: "dig "
+        replace:
+          - label: use dog
+            with: "dog "
+            default: true
+          - label: keep original
+            with: "dig "
+
+  - name: curl-to-xh
+    description: Replace curl with xh for a more intuitive HTTP client
+    detect:
+      bin: xh
+    rules:
+      - match: "curl "
+        replace:
+          - label: use xh
+            with: "xh "
+            default: true
+          - label: keep original
+            with: "curl "
+
+  - name: docker-compose-to-v2
+    description: Migrate docker-compose (v1) to docker compose (v2)
+    detect:
+      bin: docker
+    rules:
+      - match: "docker-compose "
+        replace:
+          - label: use docker compose v2
+            with: "docker compose "
+            default: true
+          - label: keep original
+            with: "docker-compose "
+
+  - name: python-to-python3
+    description: Replace python with python3 to avoid Python 2
+    detect:
+      bin: python3
+    rules:
+      - match: "python "
+        replace:
+          - label: use python3
+            with: "python3 "
+            default: true
+          - label: keep original
+            with: "python "
+
+  - name: pip-to-pip3
+    description: Replace pip with pip3 to match python3
+    detect:
+      bin: pip3
+    rules:
+      - match: "pip "
+        replace:
+          - label: use pip3
+            with: "pip3 "
+            default: true
+          - label: keep original
+            with: "pip "
