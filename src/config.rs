@@ -28,6 +28,14 @@ fn load_config_file(path: &Path) -> Result<ConfigFile, SwapxError> {
     Ok(config)
 }
 
+/// Build a canonical merge key from a rule's match patterns.
+/// Sorted and joined so that `["a","b"]` and `["b","a"]` produce the same key.
+fn rule_merge_key(rule: &Rule) -> String {
+    let mut sorted = rule.match_patterns.clone();
+    sorted.sort();
+    sorted.join("\0")
+}
+
 pub fn load_merged_config() -> Result<ConfigFile, SwapxError> {
     let mut rules_map: HashMap<String, Rule> = HashMap::new();
 
@@ -36,7 +44,7 @@ pub fn load_merged_config() -> Result<ConfigFile, SwapxError> {
         if global_path.is_file() {
             let global = load_config_file(&global_path)?;
             for rule in global.rules {
-                rules_map.insert(rule.match_pattern.clone(), rule);
+                rules_map.insert(rule_merge_key(&rule), rule);
             }
         }
     }
@@ -45,7 +53,7 @@ pub fn load_merged_config() -> Result<ConfigFile, SwapxError> {
     if let Some(local_path) = find_local_config() {
         let local = load_config_file(&local_path)?;
         for rule in local.rules {
-            rules_map.insert(rule.match_pattern.clone(), rule);
+            rules_map.insert(rule_merge_key(&rule), rule);
         }
     }
 
@@ -64,7 +72,7 @@ pub fn init_local_config() -> Result<PathBuf, SwapxError> {
     let example = ConfigFile {
         rules: vec![
             Rule {
-                match_pattern: "git checkout".into(),
+                match_patterns: vec!["git checkout".into()],
                 regex: false,
                 enabled: true,
                 replace: vec![crate::models::Replacement {
@@ -75,7 +83,7 @@ pub fn init_local_config() -> Result<PathBuf, SwapxError> {
                 }],
             },
             Rule {
-                match_pattern: "python ".into(),
+                match_patterns: vec!["python ".into()],
                 regex: false,
                 enabled: true,
                 replace: vec![crate::models::Replacement {
@@ -102,7 +110,11 @@ pub fn toggle_rule(pattern: &str, enabled: bool) -> Result<PathBuf, SwapxError> 
             continue;
         }
         let mut config = load_config_file(&path)?;
-        if let Some(rule) = config.rules.iter_mut().find(|r| r.match_pattern == pattern) {
+        if let Some(rule) = config
+            .rules
+            .iter_mut()
+            .find(|r| r.match_patterns.iter().any(|p| p == pattern))
+        {
             rule.enabled = enabled;
             let yaml = serde_yaml_ng::to_string(&config)?;
             fs::write(&path, yaml)?;
@@ -136,11 +148,13 @@ pub fn save_rule(rule: Rule, local: bool) -> Result<PathBuf, SwapxError> {
         ConfigFile { rules: vec![] }
     };
 
-    // Replace existing rule with same match pattern, or append
+    let new_key = rule_merge_key(&rule);
+
+    // Replace existing rule with same merge key, or append
     if let Some(existing) = config
         .rules
         .iter_mut()
-        .find(|r| r.match_pattern == rule.match_pattern)
+        .find(|r| rule_merge_key(r) == new_key)
     {
         *existing = rule;
     } else {

@@ -24,7 +24,7 @@ pub fn prompt_choice(pending: &PendingChoice) -> Result<usize, SwapxError> {
     let selection = Select::new()
         .with_prompt(format!(
             "Choose replacement for '{}'",
-            pending.rule.match_pattern
+            pending.matched_pattern
         ))
         .items(&labels)
         .default(default_idx)
@@ -42,7 +42,7 @@ pub fn resolve_pending_choices(
     for pending in &pending_choices {
         let idx = prompt_choice(pending)?;
         let with_value = &pending.rule.replace[idx].with_value;
-        result = engine::apply_choice(&result, &pending.rule, with_value)?;
+        result = engine::apply_choice(&result, &pending.matched_pattern, pending.rule.regex, with_value)?;
     }
 
     Ok(result)
@@ -138,7 +138,7 @@ pub fn add_rule_wizard() -> Result<(), SwapxError> {
         .interact()?;
 
     let rule = Rule {
-        match_pattern,
+        match_patterns: vec![match_pattern],
         regex: is_regex,
         enabled: true,
         replace: replacements,
@@ -160,11 +160,16 @@ pub fn list_rules(config: &ConfigFile) {
     for (i, rule) in config.rules.iter().enumerate() {
         let kind = if rule.regex { "regex" } else { "literal" };
         let disabled = if !rule.enabled { " [DISABLED]" } else { "" };
+        let patterns_display: Vec<String> = rule
+            .match_patterns
+            .iter()
+            .map(|p| format!("\"{}\"", p))
+            .collect();
         eprintln!(
-            "{}. [{}] match: \"{}\"{}",
+            "{}. [{}] match: {}{}",
             i + 1,
             kind,
-            rule.match_pattern,
+            patterns_display.join(", "),
             disabled
         );
         for repl in &rule.replace {
@@ -201,12 +206,19 @@ pub fn display_explain(command: &str, matches: &[ExplainMatch]) {
     for (i, m) in matches.iter().enumerate() {
         let kind = if m.rule.regex { "regex" } else { "literal" };
         let status = if m.is_enabled { "enabled" } else { "DISABLED" };
+        let patterns_display: Vec<String> = m
+            .rule
+            .match_patterns
+            .iter()
+            .map(|p| format!("\"{}\"", p))
+            .collect();
         eprintln!(
-            "Rule {}: [{}] [{}] match: \"{}\"",
+            "Rule {}: [{}] [{}] match: {} (matched: \"{}\")",
             i + 1,
             kind,
             status,
-            m.rule.match_pattern
+            patterns_display.join(", "),
+            m.matched_pattern
         );
 
         for repl in &m.replacements {

@@ -46,7 +46,7 @@ fn handle_list_choices(cmd_str: &str) -> Result<i32, SwapxError> {
                 .unwrap_or(-1);
             let labels: Vec<&str> = pc.rule.replace.iter().map(|r| r.label.as_str()).collect();
             // Format: MATCH_PATTERN\tDEFAULT_INDEX\tLABEL1\tLABEL2\t...
-            print!("{}\t{}", pc.rule.match_pattern, default_index);
+            print!("{}\t{}", pc.matched_pattern, default_index);
             for label in &labels {
                 print!("\t{}", label);
             }
@@ -87,11 +87,16 @@ fn handle_choice(cmd_str: &str, choice_str: &str) -> Result<i32, SwapxError> {
             return Err(SwapxError::Config(format!(
                 "choice index {} out of range for rule {:?} (has {} option(s))",
                 idx,
-                pc.rule.match_pattern,
+                pc.matched_pattern,
                 pc.rule.replace.len()
             )));
         }
-        result = engine::apply_choice(&result, &pc.rule, &pc.rule.replace[idx].with_value)?;
+        result = engine::apply_choice(
+            &result,
+            &pc.matched_pattern,
+            pc.rule.regex,
+            &pc.rule.replace[idx].with_value,
+        )?;
     }
 
     println!("{}", result);

@@ -6,6 +6,8 @@ use crate::models::{Rule, WhenCondition};
 #[derive(Debug)]
 pub struct PendingChoice {
     pub rule: Rule,
+    /// The specific pattern (from match_patterns) that matched the command.
+    pub matched_pattern: String,
 }
 
 #[derive(Debug)]
@@ -13,6 +15,23 @@ pub struct TransformResult {
     pub command: String,
     pub changed: bool,
     pub pending_choices: Vec<PendingChoice>,
+}
+
+/// Find the first pattern in `rule.match_patterns` that matches `command`.
+/// Returns the matching pattern string, or None.
+fn find_matching_pattern(command: &str, rule: &Rule) -> Result<Option<String>, SwapxError> {
+    for pattern in &rule.match_patterns {
+        let matches = if rule.regex {
+            let re = Regex::new(pattern)?;
+            re.is_match(command)
+        } else {
+            command.contains(pattern.as_str())
+        };
+        if matches {
+            return Ok(Some(pattern.clone()));
+        }
+    }
+    Ok(None)
 }
 
 pub fn apply_rules(
@@ -29,23 +48,17 @@ pub fn apply_rules(
             continue;
         }
 
-        let matches = if rule.regex {
-            let re = Regex::new(&rule.match_pattern)?;
-            re.is_match(&result)
-        } else {
-            result.contains(&rule.match_pattern)
+        let matched_pattern = match find_matching_pattern(&result, rule)? {
+            Some(p) => p,
+            None => continue,
         };
-
-        if !matches {
-            continue;
-        }
 
         if rule.replace.len() == 1 {
             // Single replacement: auto-apply (check when condition if present)
             let repl = &rule.replace[0];
             let when_ok = repl.when.as_ref().map(evaluate_when).unwrap_or(true);
             if when_ok {
-                result = do_replace(&result, rule, &repl.with_value)?;
+                result = do_replace(&result, &matched_pattern, rule.regex, &repl.with_value)?;
                 changed = true;
             }
         } else {
@@ -58,22 +71,41 @@ pub fn apply_rules(
 
             if when_matches.len() == 1 {
                 // Exactly one when-condition matches: auto-select it
-                result = do_replace(&result, rule, &when_matches[0].with_value)?;
+                result = do_replace(
+                    &result,
+                    &matched_pattern,
+                    rule.regex,
+                    &when_matches[0].with_value,
+                )?;
                 changed = true;
             } else if when_matches.len() > 1 {
                 // Multiple when-conditions match: ambiguous, need choice
-                pending_choices.push(PendingChoice { rule: rule.clone() });
+                pending_choices.push(PendingChoice {
+                    rule: rule.clone(),
+                    matched_pattern,
+                });
             } else if use_defaults {
                 // No when-conditions matched; fall through to default logic
                 if let Some(default_repl) = rule.replace.iter().find(|r| r.default) {
-                    result = do_replace(&result, rule, &default_repl.with_value)?;
+                    result = do_replace(
+                        &result,
+                        &matched_pattern,
+                        rule.regex,
+                        &default_repl.with_value,
+                    )?;
                     changed = true;
                 } else {
-                    pending_choices.push(PendingChoice { rule: rule.clone() });
+                    pending_choices.push(PendingChoice {
+                        rule: rule.clone(),
+                        matched_pattern,
+                    });
                 }
             } else {
                 // No when match, no defaults: need interactive choice
-                pending_choices.push(PendingChoice { rule: rule.clone() });
+                pending_choices.push(PendingChoice {
+                    rule: rule.clone(),
+                    matched_pattern,
+                });
             }
         }
     }
@@ -85,12 +117,17 @@ pub fn apply_rules(
     })
 }
 
-fn do_replace(command: &str, rule: &Rule, replacement: &str) -> Result<String, SwapxError> {
-    if rule.regex {
-        let re = Regex::new(&rule.match_pattern)?;
+fn do_replace(
+    command: &str,
+    pattern: &str,
+    is_regex: bool,
+    replacement: &str,
+) -> Result<String, SwapxError> {
+    if is_regex {
+        let re = Regex::new(pattern)?;
         Ok(re.replace_all(command, replacement).into_owned())
     } else {
-        Ok(command.replace(&rule.match_pattern, replacement))
+        Ok(command.replace(pattern, replacement))
     }
 }
 
@@ -140,8 +177,13 @@ pub fn evaluate_when(when: &WhenCondition) -> bool {
 }
 
 /// Apply a specific choice to the command for a pending rule
-pub fn apply_choice(command: &str, rule: &Rule, with_value: &str) -> Result<String, SwapxError> {
-    do_replace(command, rule, with_value)
+pub fn apply_choice(
+    command: &str,
+    matched_pattern: &str,
+    is_regex: bool,
+    with_value: &str,
+) -> Result<String, SwapxError> {
+    do_replace(command, matched_pattern, is_regex, with_value)
 }
 
 // --- Explain support ---
@@ -159,6 +201,8 @@ pub struct ExplainReplacement {
 #[derive(Debug)]
 pub struct ExplainMatch {
     pub rule: Rule,
+    /// The specific pattern that matched
+    pub matched_pattern: String,
     pub is_enabled: bool,
     pub replacements: Vec<ExplainReplacement>,
 }
@@ -167,20 +211,15 @@ pub fn explain_rules(command: &str, rules: &[Rule]) -> Result<Vec<ExplainMatch>,
     let mut matches = Vec::new();
 
     for rule in rules {
-        let does_match = if rule.regex {
-            let re = Regex::new(&rule.match_pattern)?;
-            re.is_match(command)
-        } else {
-            command.contains(&rule.match_pattern)
+        let matched_pattern = match find_matching_pattern(command, rule)? {
+            Some(p) => p,
+            None => continue,
         };
-
-        if !does_match {
-            continue;
-        }
 
         let mut replacements = Vec::new();
         for repl in &rule.replace {
-            let result_command = do_replace(command, rule, &repl.with_value)?;
+            let result_command =
+                do_replace(command, &matched_pattern, rule.regex, &repl.with_value)?;
             let when_matches = repl.when.as_ref().map(evaluate_when).unwrap_or(false);
 
             replacements.push(ExplainReplacement {
@@ -195,6 +234,7 @@ pub fn explain_rules(command: &str, rules: &[Rule]) -> Result<Vec<ExplainMatch>,
 
         matches.push(ExplainMatch {
             rule: rule.clone(),
+            matched_pattern,
             is_enabled: rule.enabled,
             replacements,
         });
@@ -215,7 +255,7 @@ mod tests {
         replacements: Vec<Replacement>,
     ) -> Rule {
         Rule {
-            match_pattern: pattern.into(),
+            match_patterns: vec![pattern.into()],
             regex,
             enabled,
             replace: replacements,
@@ -358,5 +398,64 @@ mod tests {
         let result = apply_rules("docker run -p 80:443 nginx", &rules, false).unwrap();
         assert!(result.changed);
         assert_eq!(result.command, "docker run -p 443:80 nginx");
+    }
+
+    #[test]
+    fn multi_match_first_pattern_matches() {
+        let rules = vec![Rule {
+            match_patterns: vec!["npm install".into(), "npm run".into()],
+            regex: false,
+            enabled: true,
+            replace: vec![make_repl("pnpm", "pnpm install", false)],
+        }];
+
+        let result = apply_rules("npm install lodash", &rules, false).unwrap();
+        assert!(result.changed);
+        assert_eq!(result.command, "pnpm install lodash");
+    }
+
+    #[test]
+    fn multi_match_second_pattern_matches() {
+        let rules = vec![Rule {
+            match_patterns: vec!["npm install".into(), "npm run".into()],
+            regex: false,
+            enabled: true,
+            replace: vec![make_repl("pnpm", "pnpm run", false)],
+        }];
+
+        let result = apply_rules("npm run build", &rules, false).unwrap();
+        assert!(result.changed);
+        assert_eq!(result.command, "pnpm run build");
+    }
+
+    #[test]
+    fn multi_match_no_pattern_matches() {
+        let rules = vec![Rule {
+            match_patterns: vec!["npm install".into(), "npm run".into()],
+            regex: false,
+            enabled: true,
+            replace: vec![make_repl("pnpm", "pnpm install", false)],
+        }];
+
+        let result = apply_rules("npm test", &rules, false).unwrap();
+        assert!(!result.changed);
+        assert_eq!(result.command, "npm test");
+    }
+
+    #[test]
+    fn multi_match_pending_choice_has_matched_pattern() {
+        let rules = vec![Rule {
+            match_patterns: vec!["npm install".into(), "npm run".into()],
+            regex: false,
+            enabled: true,
+            replace: vec![
+                make_repl("pnpm", "pnpm run", false),
+                make_repl("yarn", "yarn run", false),
+            ],
+        }];
+
+        let result = apply_rules("npm run build", &rules, false).unwrap();
+        assert_eq!(result.pending_choices.len(), 1);
+        assert_eq!(result.pending_choices[0].matched_pattern, "npm run");
     }
 }
