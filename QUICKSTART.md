@@ -14,36 +14,40 @@ Verify it works:
 swapx --help
 ```
 
-## 2. Initialize a config
+## 2. Initialize config
 
-Navigate to a project directory and create a local config:
+Set up the global config directory and install builtin suggestion packs:
 
 ```sh
-cd ~/my-project
 swapx init
 ```
 
-This creates `.swapx.yaml` with two example rules:
+This creates:
 
-- `git checkout` → `git switch` — nudge toward modern Git commands
-- `python` → `python3` — common fix for macOS/Linux where `python` is missing or points to 2.x
+- `~/.config/swapx/rules.yaml` — empty rules file with commented-out examples
+- `~/.config/swapx/suggestions.d/builtin.yaml` — builtin suggestions for modern CLI tool replacements
 
-## 3. See your rules
+## 3. Generate rules from suggestions
+
+Auto-detect installed tools and generate rules:
+
+```sh
+swapx suggest --auto
+```
+
+Or interactively pick which suggestions to accept:
+
+```sh
+swapx suggest
+```
+
+## 4. See your rules
 
 ```sh
 swapx list
 ```
 
-Output:
-
-```
-1. [literal] match: "git checkout"
-     → use-switch: "git switch" (default)
-2. [literal] match: "python "
-     → use-python3: "python3 " (default)
-```
-
-## 4. Test with dry-run
+## 5. Test with dry-run
 
 Preview a transformation without executing anything:
 
@@ -59,7 +63,7 @@ git switch main
 
 The default replacement was applied automatically.
 
-## 5. Run for real
+## 6. Run for real
 
 ```sh
 swapx git checkout main
@@ -71,7 +75,7 @@ swapx shows the rewritten command and executes it:
 swapx: → git switch main
 ```
 
-## 6. Debug with explain
+## 7. Debug with explain
 
 Not sure which rules will match? Use `explain`:
 
@@ -89,9 +93,9 @@ Rule 1: [literal] [enabled] match: "git@github.com:"
   → work: "git@github-work:" → "git clone git@github-work:user/repo.git"
 ```
 
-## 7. Edit rules
+## 8. Edit rules
 
-Open `.swapx.yaml` in your editor and modify rules directly. The format is straightforward YAML. Here's a minimal rule:
+Open `~/.config/swapx/rules.yaml` (global) or `.swapx.yaml` (per-project) in your editor and modify rules directly. The format is straightforward YAML. Here's a minimal rule:
 
 ```yaml
 rules:
@@ -101,7 +105,7 @@ rules:
         with: "npx vitest"
 ```
 
-## 8. Add shell integration (optional)
+## 9. Add shell integration (optional)
 
 To intercept commands transparently without the `swapx` prefix:
 

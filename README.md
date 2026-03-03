@@ -43,8 +43,11 @@ cargo install --path .
 ## Quick start
 
 ```sh
-# Create a .swapx.yaml in your project
+# Initialize global config and install builtin suggestion packs
 swapx init
+
+# Auto-detect tools and generate rules
+swapx suggest --auto
 
 # See what's configured
 swapx list

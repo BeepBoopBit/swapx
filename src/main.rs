@@ -208,10 +208,21 @@ fn run() -> Result<i32, SwapxError> {
             Ok(0)
         }
 
-        Some(Commands::Init) => {
-            let created = config::init_config()?;
-            for path in &created {
-                eprintln!("Created {}", path.display());
+        Some(Commands::Init { force }) => {
+            let overwrite = if force {
+                config::InitOverwrite::Force
+            } else if is_tty {
+                config::InitOverwrite::Prompt
+            } else {
+                config::InitOverwrite::Error
+            };
+            let actions = config::init_config(overwrite)?;
+            for action in &actions {
+                match action {
+                    config::InitAction::Created(p) => eprintln!("Created {}", p.display()),
+                    config::InitAction::Replaced(p) => eprintln!("Replaced {}", p.display()),
+                    config::InitAction::Skipped(p) => eprintln!("Skipped {}", p.display()),
+                }
             }
             Ok(0)
         }

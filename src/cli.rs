@@ -32,7 +32,11 @@ pub enum Commands {
     List,
 
     /// Initialize global swapx config and install builtin suggestion packs
-    Init,
+    Init {
+        /// Overwrite existing files without prompting
+        #[arg(long)]
+        force: bool,
+    },
 
     /// Enable a rule by its match pattern
     Enable {

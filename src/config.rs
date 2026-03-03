@@ -95,38 +95,87 @@ const EXAMPLE_RULES_YAML: &str = "\
 rules: []
 ";
 
-pub fn init_config() -> Result<Vec<PathBuf>, SwapxError> {
+pub enum InitOverwrite {
+    /// Ask the user interactively per file
+    Prompt,
+    /// Overwrite everything without asking
+    Force,
+    /// Error if anything exists (for non-TTY / tests)
+    Error,
+}
+
+#[derive(Debug)]
+pub enum InitAction {
+    Created(PathBuf),
+    Replaced(PathBuf),
+    Skipped(PathBuf),
+}
+
+fn write_or_prompt(
+    path: &Path,
+    contents: &str,
+    overwrite: &InitOverwrite,
+) -> Result<InitAction, SwapxError> {
+    if path.exists() {
+        match overwrite {
+            InitOverwrite::Error => {
+                return Err(SwapxError::Config(format!(
+                    "{} already exists (already initialized)",
+                    path.display()
+                )));
+            }
+            InitOverwrite::Force => {
+                fs::write(path, contents)?;
+                return Ok(InitAction::Replaced(path.to_path_buf()));
+            }
+            InitOverwrite::Prompt => {
+                let prompt =
+                    format!("{} already exists. Replace with defaults?", path.display());
+                let confirm = dialoguer::Confirm::new()
+                    .with_prompt(prompt)
+                    .default(false)
+                    .interact()
+                    .map_err(|e| SwapxError::Config(format!("prompt failed: {}", e)))?;
+                if confirm {
+                    fs::write(path, contents)?;
+                    return Ok(InitAction::Replaced(path.to_path_buf()));
+                } else {
+                    return Ok(InitAction::Skipped(path.to_path_buf()));
+                }
+            }
+        }
+    }
+
+    fs::write(path, contents)?;
+    Ok(InitAction::Created(path.to_path_buf()))
+}
+
+pub fn init_config(overwrite: InitOverwrite) -> Result<Vec<InitAction>, SwapxError> {
     let config_dir = global_config_dir()
         .ok_or_else(|| SwapxError::Config("Cannot determine config directory".into()))?;
 
-    if config_dir.is_dir() {
-        return Err(SwapxError::Config(
-            format!("{} already exists (already initialized)", config_dir.display()),
-        ));
-    }
+    let mut actions = Vec::new();
 
-    let mut created = Vec::new();
-
-    // Create ~/.config/swapx/
+    // Ensure ~/.config/swapx/ exists
     fs::create_dir_all(&config_dir)?;
-    created.push(config_dir.clone());
 
-    // Write ~/.config/swapx/rules.yaml with commented-out examples
+    // Write ~/.config/swapx/rules.yaml
     let rules_path = config_dir.join("rules.yaml");
-    fs::write(&rules_path, EXAMPLE_RULES_YAML)?;
-    created.push(rules_path);
+    actions.push(write_or_prompt(&rules_path, EXAMPLE_RULES_YAML, &overwrite)?);
 
-    // Create ~/.config/swapx/suggestions.d/
+    // Ensure ~/.config/swapx/suggestions.d/ exists
     let suggestions_dir = config_dir.join("suggestions.d");
     fs::create_dir_all(&suggestions_dir)?;
-    created.push(suggestions_dir.clone());
 
-    // Copy builtin suggestions to ~/.config/swapx/suggestions.d/builtin.yaml
+    // Write ~/.config/swapx/suggestions.d/builtin.yaml
     let builtin_path = suggestions_dir.join("builtin.yaml");
-    fs::write(&builtin_path, BUILTIN_SUGGESTIONS_YAML)?;
-    created.push(builtin_path);
+    actions.push(write_or_prompt(
+        &builtin_path,
+        BUILTIN_SUGGESTIONS_YAML,
+        &overwrite,
+    )?);
 
-    Ok(created)
+    Ok(actions)
 }
 
 pub fn toggle_rule(pattern: &str, enabled: bool) -> Result<PathBuf, SwapxError> {
@@ -304,7 +353,7 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         env::set_var("XDG_CONFIG_HOME", tmp.path());
 
-        let created = init_config().unwrap();
+        let actions = init_config(InitOverwrite::Error).unwrap();
 
         let config_dir = tmp.path().join("swapx");
         assert!(config_dir.is_dir());
@@ -312,8 +361,10 @@ mod tests {
         assert!(config_dir.join("suggestions.d").is_dir());
         assert!(config_dir.join("suggestions.d").join("builtin.yaml").is_file());
 
-        // Should have created 4 entries: dir, rules.yaml, suggestions.d, builtin.yaml
-        assert_eq!(created.len(), 4);
+        // Should have 2 actions: rules.yaml + builtin.yaml
+        assert_eq!(actions.len(), 2);
+        assert!(matches!(&actions[0], InitAction::Created(_)));
+        assert!(matches!(&actions[1], InitAction::Created(_)));
 
         // rules.yaml should have empty rules list
         let rules_contents = fs::read_to_string(config_dir.join("rules.yaml")).unwrap();
@@ -337,10 +388,39 @@ mod tests {
 
         let config_dir = tmp.path().join("swapx");
         fs::create_dir_all(&config_dir).unwrap();
+        fs::write(config_dir.join("rules.yaml"), "rules: []\n").unwrap();
 
-        let result = init_config();
+        let result = init_config(InitOverwrite::Error);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("already exists"));
+    }
+
+    #[test]
+    fn init_config_force_replaces_files() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        env::set_var("XDG_CONFIG_HOME", tmp.path());
+
+        let config_dir = tmp.path().join("swapx");
+        let suggestions_dir = config_dir.join("suggestions.d");
+        fs::create_dir_all(&suggestions_dir).unwrap();
+
+        // Pre-create files with custom content
+        fs::write(config_dir.join("rules.yaml"), "rules: [custom]\n").unwrap();
+        fs::write(suggestions_dir.join("builtin.yaml"), "old content\n").unwrap();
+
+        let actions = init_config(InitOverwrite::Force).unwrap();
+
+        assert_eq!(actions.len(), 2);
+        assert!(matches!(&actions[0], InitAction::Replaced(_)));
+        assert!(matches!(&actions[1], InitAction::Replaced(_)));
+
+        // Files should now contain defaults
+        let rules_contents = fs::read_to_string(config_dir.join("rules.yaml")).unwrap();
+        assert!(rules_contents.contains("rules: []"));
+
+        let builtin_contents =
+            fs::read_to_string(suggestions_dir.join("builtin.yaml")).unwrap();
+        assert!(builtin_contents.contains("suggestions:"));
     }
 }

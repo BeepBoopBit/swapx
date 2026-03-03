@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `swapx init` now sets up global config (`~/.config/swapx/`) instead of creating a local `.swapx.yaml` — it creates `rules.yaml` (with commented-out examples), `suggestions.d/`, and installs `suggestions.d/builtin.yaml`
+- Builtin suggestions are no longer compiled into the binary — they are installed to disk by `swapx init` and loaded from `~/.config/swapx/suggestions.d/`
+- `swapx reset` now fully wipes suggestions; `swapx init` must be re-run to restore them
 - Shell hooks now use a two-phase protocol: `--list-choices` to detect pending choices, then `--choice` to apply the user's selection via shell-native numbered menus
 - Shell hooks read from `/dev/tty` in zsh/bash to avoid buffered stdin issues inside widget/trap contexts
 

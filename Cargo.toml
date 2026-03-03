@@ -1,6 +1,6 @@
 [package]
 name = "swapx"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 description = "A command rewriter for your terminal — define rules that automatically transform commands before they execute"
 license = "MIT"

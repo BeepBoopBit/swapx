@@ -47,11 +47,40 @@ fn init_creates_config_file() {
 }
 
 #[test]
-fn init_fails_if_config_exists() {
+fn init_force_replaces_existing() {
+    let dir = TempDir::new().unwrap();
+    let config_dir = dir.path().join(".config").join("swapx");
+    let suggestions_dir = config_dir.join("suggestions.d");
+    fs::create_dir_all(&suggestions_dir).unwrap();
+
+    // Pre-create files with custom content
+    fs::write(config_dir.join("rules.yaml"), "rules: [custom]\n").unwrap();
+    fs::write(suggestions_dir.join("builtin.yaml"), "old content\n").unwrap();
+
+    swapx()
+        .args(["init", "--force"])
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Replaced"));
+
+    // Verify files were overwritten with defaults
+    let rules = fs::read_to_string(config_dir.join("rules.yaml")).unwrap();
+    assert!(rules.contains("rules: []"));
+
+    let builtin = fs::read_to_string(suggestions_dir.join("builtin.yaml")).unwrap();
+    assert!(builtin.contains("suggestions:"));
+}
+
+#[test]
+fn init_non_tty_errors_if_exists() {
     let dir = TempDir::new().unwrap();
     let config_dir = dir.path().join(".config").join("swapx");
     fs::create_dir_all(&config_dir).unwrap();
+    fs::write(config_dir.join("rules.yaml"), "rules: []\n").unwrap();
 
+    // Without --force in a non-TTY context, should error
     swapx()
         .arg("init")
         .env("HOME", dir.path())

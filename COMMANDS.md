@@ -71,19 +71,24 @@ swapx --cmd "echo melon" --choice 1
 
 ### `swapx init`
 
-Create a `.swapx.yaml` in the current directory with example rules.
+Initialize global swapx config and install builtin suggestion packs.
 
 ```sh
 swapx init
-# Created /home/user/project/.swapx.yaml
+# Created /home/user/.config/swapx/
+# Created /home/user/.config/swapx/rules.yaml
+# Created /home/user/.config/swapx/suggestions.d/
+# Created /home/user/.config/swapx/suggestions.d/builtin.yaml
 ```
 
-Fails if `.swapx.yaml` already exists in the current directory.
+Fails if `~/.config/swapx/` already exists (already initialized).
 
-The generated config includes:
+This creates:
 
-- `git checkout` → `git switch` — nudge toward modern Git commands
-- `python` → `python3` — fix for systems where `python` is missing or points to 2.x
+- `~/.config/swapx/rules.yaml` — empty rules file with commented-out examples
+- `~/.config/swapx/suggestions.d/builtin.yaml` — builtin suggestion pack (modern CLI tool replacements like `cat` → `bat`, `ls` → `eza`, `grep` → `rg`, etc.)
+
+After init, run `swapx suggest` to auto-detect installed tools and generate rules from the suggestion packs.
 
 ---
 
