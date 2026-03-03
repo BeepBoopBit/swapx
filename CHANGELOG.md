@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--cmd <COMMAND>` flag — pass a command string directly, keeping stdin as the terminal so interactive prompts (dialoguer selectors) work from shell hooks
+- Exit code 10 semantics — signals the user already made an interactive selection, so shell hooks auto-apply without double-prompting
+
+### Changed
+
+- Shell hooks now use `swapx --dry-run --cmd "$BUFFER"` instead of piping through `echo "$BUFFER" | swapx 2>/dev/null`, enabling interactive replacement selection directly in the shell
+- Shell hooks no longer suppress stderr with `2>/dev/null`, allowing dialoguer prompts to display
+
+### Fixed
+
+- Shell hooks could not show interactive options when a rule had multiple replacements with no matching `when` condition or default — the pipe-based invocation forced non-interactive mode
+
 ## [0.1.0] - 2025-02-27
 
 ### Added

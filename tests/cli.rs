@@ -108,6 +108,8 @@ fn list_empty_config() {
     swapx()
         .arg("list")
         .current_dir(dir.path())
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
         .assert()
         .success()
         .stderr(predicate::str::contains("No rules configured"));
@@ -591,4 +593,490 @@ fn init_creates_valid_yaml() {
         .assert()
         .success()
         .stderr(predicate::str::contains("git checkout").and(predicate::str::contains("python")));
+}
+
+// ─── --cmd flag ───
+
+#[test]
+fn cmd_flag_single_replacement() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "git checkout"
+    replace:
+      - label: use-switch
+        with: "git switch"
+"#,
+    );
+
+    swapx()
+        .args(["--dry-run", "--cmd", "git checkout main"])
+        .current_dir(dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("git switch main"));
+}
+
+#[test]
+fn cmd_flag_no_match_passthrough() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "git checkout"
+    replace:
+      - label: use-switch
+        with: "git switch"
+"#,
+    );
+
+    swapx()
+        .args(["--dry-run", "--cmd", "echo hello world"])
+        .current_dir(dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("echo hello world"));
+}
+
+#[test]
+fn cmd_flag_when_condition_auto_select() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "kubectl"
+    replace:
+      - label: staging
+        with: "kubectl --context=staging"
+        when:
+          env: "KUBE_ENV=staging"
+      - label: production
+        with: "kubectl --context=production"
+        when:
+          env: "KUBE_ENV=production"
+"#,
+    );
+
+    swapx()
+        .args(["--dry-run", "--cmd", "kubectl get pods"])
+        .current_dir(dir.path())
+        .env("KUBE_ENV", "staging")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "kubectl --context=staging get pods",
+        ));
+}
+
+#[test]
+fn cmd_flag_multi_replacement_no_default_non_tty() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "git@github.com:"
+    replace:
+      - label: personal
+        with: "git@github-personal:"
+      - label: work
+        with: "git@github-work:"
+"#,
+    );
+
+    // In test, stdin is not a TTY, so pending choices should pass through as-is
+    swapx()
+        .args([
+            "--dry-run",
+            "--cmd",
+            "git clone git@github.com:user/repo.git",
+        ])
+        .current_dir(dir.path())
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join(".config"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "git clone git@github.com:user/repo.git",
+        ));
+}
+
+#[test]
+fn cmd_flag_multi_replacement_has_default_non_tty() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "git@github.com:"
+    replace:
+      - label: personal
+        with: "git@github-personal:"
+        default: true
+      - label: work
+        with: "git@github-work:"
+"#,
+    );
+
+    // Non-tty with a default should apply the default
+    swapx()
+        .args([
+            "--dry-run",
+            "--cmd",
+            "git clone git@github.com:user/repo.git",
+        ])
+        .current_dir(dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "git clone git@github-personal:user/repo.git",
+        ));
+}
+
+#[test]
+fn cmd_flag_preserves_special_characters() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "echo"
+    replace:
+      - label: printf
+        with: "printf"
+"#,
+    );
+
+    swapx()
+        .args(["--dry-run", "--cmd", "echo 'hello world' | grep foo && bar"])
+        .current_dir(dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "printf 'hello world' | grep foo && bar",
+        ));
+}
+
+#[test]
+fn cmd_flag_combined_with_subcommand_errors() {
+    swapx()
+        .args(["--cmd", "git checkout main", "list"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn shell_hook_zsh_contains_cmd_flag() {
+    swapx()
+        .args(["shell-hook", "zsh"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("swapx --dry-run --cmd"));
+}
+
+#[test]
+fn shell_hook_bash_contains_cmd_flag() {
+    swapx()
+        .args(["shell-hook", "bash"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("swapx --dry-run --cmd"));
+}
+
+#[test]
+fn shell_hook_fish_contains_cmd_flag() {
+    swapx()
+        .args(["shell-hook", "fish"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("swapx --dry-run --cmd"));
+}
+
+#[test]
+fn shell_hook_powershell_contains_cmd_flag() {
+    swapx()
+        .args(["shell-hook", "powershell"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("swapx --dry-run --cmd"));
+}
+
+#[test]
+fn shell_hook_nushell_contains_cmd_flag() {
+    swapx()
+        .args(["shell-hook", "nu"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("swapx --dry-run --cmd"));
+}
+
+// ─── --list-choices ───
+
+#[test]
+fn list_choices_no_pending_outputs_transformed() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "git checkout"
+    replace:
+      - label: use-switch
+        with: "git switch"
+        default: true
+"#,
+    );
+
+    swapx()
+        .args(["--cmd", "git checkout main", "--list-choices"])
+        .current_dir(dir.path())
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("git switch main"));
+}
+
+#[test]
+fn list_choices_with_pending_exits_20() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "melon"
+    replace:
+      - label: water
+        with: "watermelon"
+      - label: papaya
+        with: "papaya"
+"#,
+    );
+
+    swapx()
+        .args(["--cmd", "echo melon", "--list-choices"])
+        .current_dir(dir.path())
+        .assert()
+        .code(20)
+        .stdout(
+            predicate::str::contains("echo melon\n")
+                .and(predicate::str::contains("melon\t-1\twater\tpapaya")),
+        );
+}
+
+#[test]
+fn list_choices_with_default_index() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "melon"
+    replace:
+      - label: water
+        with: "watermelon"
+      - label: papaya
+        with: "papaya"
+        default: true
+"#,
+    );
+
+    swapx()
+        .args(["--cmd", "echo melon", "--list-choices"])
+        .current_dir(dir.path())
+        .assert()
+        .code(20)
+        .stdout(predicate::str::contains("melon\t1\twater\tpapaya"));
+}
+
+#[test]
+fn list_choices_no_match_exits_0() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "git checkout"
+    replace:
+      - label: use-switch
+        with: "git switch"
+"#,
+    );
+
+    swapx()
+        .args(["--cmd", "echo hello", "--list-choices"])
+        .current_dir(dir.path())
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("echo hello"));
+}
+
+#[test]
+fn list_choices_requires_cmd() {
+    swapx()
+        .args(["--list-choices"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--list-choices requires --cmd"));
+}
+
+// ─── --choice ───
+
+#[test]
+fn choice_applies_selection() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "melon"
+    replace:
+      - label: water
+        with: "watermelon"
+      - label: papaya
+        with: "papaya"
+"#,
+    );
+
+    swapx()
+        .args(["--cmd", "echo melon", "--choice", "1"])
+        .current_dir(dir.path())
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("echo papaya"));
+}
+
+#[test]
+fn choice_index_0() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "melon"
+    replace:
+      - label: water
+        with: "watermelon"
+      - label: papaya
+        with: "papaya"
+"#,
+    );
+
+    swapx()
+        .args(["--cmd", "echo melon", "--choice", "0"])
+        .current_dir(dir.path())
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("echo watermelon"));
+}
+
+#[test]
+fn choice_out_of_range() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "melon"
+    replace:
+      - label: water
+        with: "watermelon"
+      - label: papaya
+        with: "papaya"
+"#,
+    );
+
+    swapx()
+        .args(["--cmd", "echo melon", "--choice", "5"])
+        .current_dir(dir.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("out of range"));
+}
+
+#[test]
+fn choice_invalid_index() {
+    let dir = TempDir::new().unwrap();
+    create_config(
+        &dir,
+        r#"rules:
+  - match: "melon"
+    replace:
+      - label: water
+        with: "watermelon"
+      - label: papaya
+        with: "papaya"
+"#,
+    );
+
+    swapx()
+        .args(["--cmd", "echo melon", "--choice", "abc"])
+        .current_dir(dir.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid choice index"));
+}
+
+#[test]
+fn choice_requires_cmd() {
+    swapx()
+        .args(["--choice", "0"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--choice requires --cmd"));
+}
+
+#[test]
+fn list_choices_and_choice_mutual_exclusion() {
+    swapx()
+        .args(["--cmd", "echo hello", "--list-choices", "--choice", "0"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("mutually exclusive"));
+}
+
+// ─── shell hooks contain --list-choices and --choice ───
+
+#[test]
+fn shell_hook_zsh_contains_list_choices() {
+    swapx()
+        .args(["shell-hook", "zsh"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("--list-choices").and(predicate::str::contains("--choice")),
+        );
+}
+
+#[test]
+fn shell_hook_bash_contains_list_choices() {
+    swapx()
+        .args(["shell-hook", "bash"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("--list-choices").and(predicate::str::contains("--choice")),
+        );
+}
+
+#[test]
+fn shell_hook_fish_contains_list_choices() {
+    swapx()
+        .args(["shell-hook", "fish"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("--list-choices").and(predicate::str::contains("--choice")),
+        );
+}
+
+#[test]
+fn shell_hook_powershell_contains_list_choices() {
+    swapx()
+        .args(["shell-hook", "powershell"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("--list-choices").and(predicate::str::contains("--choice")),
+        );
+}
+
+#[test]
+fn shell_hook_nushell_contains_list_choices() {
+    swapx()
+        .args(["shell-hook", "nu"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("--list-choices").and(predicate::str::contains("--choice")),
+        );
 }

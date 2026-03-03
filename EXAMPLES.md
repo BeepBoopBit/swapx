@@ -303,17 +303,28 @@ Invoke-Expression (swapx shell-hook powershell)
 swapx shell-hook nu
 ```
 
-Now type commands normally:
+Now type commands normally. When a rule has a single replacement or a `when` condition matches, the hook shows the transformation and asks to confirm:
 
 ```
-$ git clone git@github.com:user/repo.git
+$ git checkout main
 
-swapx: git clone git@github.com:user/repo.git
-    → git clone git@github-personal:user/repo.git
+swapx: git checkout main
+    → git switch main
 Apply? [Y/n]
 ```
 
-To skip the prompt and always auto-apply:
+When a rule has multiple replacement options and no default or `when` condition matches, you'll see an interactive selector directly in your shell:
+
+```
+$ git clone git@github.com:user/repo.git
+Choose replacement for 'git@github.com:':
+> personal
+  work
+```
+
+After you select an option, the transformation is auto-applied (no extra "Apply?" prompt since you already chose).
+
+To skip the confirmation prompt for non-interactive transformations and always auto-apply:
 
 ```sh
 export SWAPX_AUTO_APPLY=1

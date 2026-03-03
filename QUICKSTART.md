@@ -137,9 +137,9 @@ swapx shell-hook nu
 
 This outputs a function to save to `~/.config/nushell/swapx.nu` and a keybinding to add to your `config.nu`.
 
-Now just type commands normally. When a rule matches, swapx shows the transformation and asks to confirm before applying.
+Now just type commands normally. When a rule matches, swapx shows the transformation and asks to confirm before applying. If a rule has multiple options with no matching `when` condition or default, an interactive selector appears directly in your shell so you can choose.
 
-Set `SWAPX_AUTO_APPLY=1` in your shell config to skip the confirmation.
+Set `SWAPX_AUTO_APPLY=1` in your shell config to skip the confirmation for non-interactive transformations.
 
 ## Next steps
 

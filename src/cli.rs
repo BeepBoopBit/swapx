@@ -7,6 +7,18 @@ pub struct Cli {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// Pass a command string directly (preserves stdin as TTY for interactive prompts)
+    #[arg(long)]
+    pub cmd: Option<String>,
+
+    /// Output pending choices as tab-separated lines (exit 20 if choices pending, 0 otherwise)
+    #[arg(long)]
+    pub list_choices: bool,
+
+    /// Apply comma-separated 0-based choice indices for pending rules (implies dry-run)
+    #[arg(long)]
+    pub choice: Option<String>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

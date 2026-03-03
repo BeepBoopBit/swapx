@@ -23,6 +23,7 @@ swapx sits in front of your shell and rewrites commands before they execute, bas
 - **Explain mode** — debug which rules match and preview what they'd produce
 - **Enable/disable rules** — toggle rules on and off without deleting them
 - **Dry-run mode** — see the transformed command without executing
+- **`--cmd` flag** — pass commands directly so shell hooks can show interactive prompts
 - **Pipe mode** — use swapx as a filter in pipelines (`echo "cmd" | swapx`)
 
 ## Install
@@ -156,7 +157,9 @@ Invoke-Expression (swapx shell-hook powershell)
 swapx shell-hook nu
 ```
 
-Set `SWAPX_AUTO_APPLY=1` to skip the confirmation prompt.
+Shell hooks use `swapx --dry-run --cmd "$BUFFER"` internally. This keeps stdin connected to the terminal, so when a rule has multiple replacement options and no `when` condition or default matches, you'll see an interactive selector directly in your shell. If you make a selection, swapx exits with code 10 and the hook auto-applies the result without double-prompting.
+
+Set `SWAPX_AUTO_APPLY=1` to skip the confirmation prompt for non-interactive transformations.
 
 ## License
 

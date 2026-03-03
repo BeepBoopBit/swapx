@@ -4,12 +4,37 @@
 
 ### `--dry-run`
 
-Show the transformed command without executing it. Works with any external command.
+Show the transformed command without executing it. Works with any external command or `--cmd`.
 
 ```sh
 swapx --dry-run git clone git@github.com:user/repo.git
 # prints: git clone git@github-personal:user/repo.git
 ```
+
+### `--cmd <COMMAND>`
+
+Pass a command string directly instead of using positional arguments or stdin. This keeps stdin connected to the terminal, enabling interactive prompts (e.g., dialoguer selectors) when a rule has multiple replacement options.
+
+```sh
+swapx --cmd "git clone git@github.com:user/repo.git"
+# If multiple options exist and no default/when matches: shows interactive selector
+# Then executes the selected transformation
+
+swapx --dry-run --cmd "git clone git@github.com:user/repo.git"
+# Same, but prints the result instead of executing
+```
+
+This is primarily used by shell hooks internally. Cannot be combined with a subcommand.
+
+**Exit codes when used with `--dry-run`:**
+
+| Code | Meaning |
+|------|---------|
+| 0 | No change, or transformation was auto-applied (default/when match) |
+| 10 | User made an interactive selection via the dialoguer prompt |
+| 1 | Error |
+
+Shell hooks use exit code 10 to auto-apply the result without double-prompting the user.
 
 ## Subcommands
 
@@ -133,6 +158,13 @@ swapx shell-hook nu                                   # nushell — follow print
 ```
 
 Supported shells: `zsh`, `bash`, `fish`, `powershell` (alias: `pwsh`), `nu` (alias: `nushell`).
+
+The generated hooks use `swapx --dry-run --cmd "$BUFFER"` to transform commands. This passes the command as a single string argument (avoiding word-splitting issues with special characters) and keeps stdin as the terminal so interactive selectors work. The hook checks the exit code:
+
+- **Exit 10** — user already chose via an interactive prompt; the hook auto-applies the transformation
+- **Exit 0** + command changed — the hook shows the transformation and prompts "Apply? [Y/n]" (or auto-applies if `SWAPX_AUTO_APPLY=1`)
+- **Exit 0** + command unchanged — no transformation; command runs as-is
+- **Exit 1** — error; command runs as-is
 
 **Environment variables:**
 
